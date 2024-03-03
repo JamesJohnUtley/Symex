@@ -7,6 +7,7 @@ from typing import List, Any, Dict
 from z3 import *
 from solving import SolvingState, SymbolicInstruction, SymbolicConstraint, SymbolicVariable
 from const_variables import *
+from extern_funcs import *
 
 class ReturnInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
@@ -113,6 +114,34 @@ class CompareOpInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
         ss.avaliability_stack.append(self.instruction.arg)
 
+class PopTopInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        self.requested_items = 1
+        ss.hunting_stack.append(self)
+    def execute(self, ss: SolvingState):
+        pass
+
+class CallInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        pass
+
+class PreCallInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        self.requested_items = self.instruction.argval + 1
+        ss.hunting_stack.append(self)
+    def execute(self, ss: SolvingState):
+        if self.given_items[0] in external_functions_execs.keys():
+            external_functions_execs[self.given_items[0]](list(self.given_items)[1:], ss)
+        else:
+            print(f"ERROR: EXEC EXTERNAL FUNCTION {self.given_items[0]} NOT IMPLEMENTED", file=sys.stderr)
+
+class LoadGlobalInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        ss.avaliability_stack.append(self.instruction.argval)
+
+class JumpForwardInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        pass
 
 symbolic_instructions = {
     'RETURN_VALUE': ReturnInstruction,
@@ -123,5 +152,10 @@ symbolic_instructions = {
     'BINARY_OP': BinaryOpInstruction,
     'POP_JUMP_FORWARD_IF_FALSE': PopJumpForwardIfFalseInstruction,
     'POP_JUMP_FORWARD_IF_TRUE': PopJumpForwardIfTrueInstruction,
-    'COMPARE_OP': CompareOpInstruction
+    'COMPARE_OP': CompareOpInstruction,
+    'POP_TOP': PopTopInstruction,
+    'CALL': CallInstruction,
+    'PRECALL': PreCallInstruction,
+    'LOAD_GLOBAL': LoadGlobalInstruction,
+    'JUMP_FORWARD': JumpForwardInstruction
 }

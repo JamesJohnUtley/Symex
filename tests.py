@@ -37,6 +37,13 @@ def single_block():
     c = b
     return c
 
+def print_test(x):
+    if x < 15:
+        ValueError('error')
+    else:
+        ValueError('print')
+    return 5
+
 def math_block():
     d = 9
     d = 3 * d

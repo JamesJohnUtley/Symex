@@ -11,7 +11,7 @@ from symins import *
 from solving import SolvingState, SymbolicInstruction
 
 
-follow_lead_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE']
+follow_lead_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE', 'JUMP_FORWARD']
 conditional_jump_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE']
 
 MAX_DEPTH: int = 10
@@ -125,6 +125,10 @@ def construct_cfg(instructions: List[Instruction]) -> Tuple[Dict[int,Instruction
             # End Block
             x.set_end_block()
             end_blocks.append(x)
+        elif last_instruction.opname == 'JUMP_FORWARD':
+            # Unconditional Jump
+            jumped_block = find_block_offset(last_instruction.argval, blocks)
+            x.add_successor(jumped_block)
         else:
             # One Successor
             x.add_successor(x.following_block)

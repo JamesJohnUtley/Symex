@@ -22,7 +22,8 @@ class SymbolicInstruction:
         print(self.given_items,file=sys.stderr)
         print("Error: SymbolicInstruction Not Implemented",file=sys.stderr)
     def copy(self):
-        print("COPY")
+        print("COPY SYMBOLIC INSTRUCTION")
+        print(self.instruction)
         copied_given = self.given_items.copy()
         return self.__class__(self.instruction,self.requested_items,copied_given)
     
