@@ -38,6 +38,32 @@ class SymbolicConstraint:
         self.in_op = in_op
         self.in_v1 = in_v1
 
+    def add_connections(self, var_connections: dict[str, list[str]], type_seeds: list[tuple[str,type]]):
+        symbolic = []
+        nonsymbolic = []
+        symbolic.append(self.out_v) if type(self.out_v) is SymbolicVariable else nonsymbolic.append(self.out_v)
+        symbolic.append(self.in_v0) if type(self.in_v0) is SymbolicVariable else nonsymbolic.append(self.in_v0)
+        symbolic.append(self.in_v1) if type(self.in_v1) is SymbolicVariable else nonsymbolic.append(self.in_v1)
+        for i in range(len(symbolic)):
+            for j in range(len(symbolic)):
+                if i != j:
+                    var_connections[symbolic[i].name].append(symbolic[j].name)
+        # Find Type
+        needed_type = None
+        for ns in nonsymbolic:
+            if ns is not None:
+                if needed_type is not None:
+                    if type(ns) != needed_type:
+                        print(f"ERROR: CONSTRAINT HAS CONFLICTING TYPES", sys.stderr)
+                        return
+                else:
+                    needed_type = type(ns)
+        # Set symbolic as seeds if there is a type
+        if needed_type is not None:
+            for s in symbolic:
+                type_seeds.append((s.name, needed_type))
+
+
     def gen_solver_constraint(self, solver: Solver, made_vars: dict[str, Any]):
         out_v = self.out_v if type(self.out_v) is not SymbolicVariable else made_vars[self.out_v.name]
         in_v0 = self.in_v0 if type(self.in_v0) is not SymbolicVariable else made_vars[self.in_v0.name]
@@ -46,6 +72,13 @@ class SymbolicConstraint:
         else:
             in_v1 = self.in_v1 if type(self.in_v1) is not SymbolicVariable else made_vars[self.in_v1.name]
             solver.add(self.comparator(out_v, self.in_op(in_v0,in_v1)))
+
+def gen_solver_var(name: str, var_type: type) -> Any:
+    if var_type is str:
+        return String(name)
+    if var_type is int:
+        return Int(name)
+    return Int(name)
 
 class SolvingState:
     def __init__(self,
@@ -63,7 +96,7 @@ class SolvingState:
         # Set out
         if output != None:
             out_var = self.get_new_variable_iteration(OUT_CV)
-            self.constraints.append(SymbolicConstraint(output,out_var,operator.eq))
+            self.constraints.append(SymbolicConstraint(int(output),out_var,operator.eq))
 
     def copy(self):
         copied_hunting_stack: deque[SymbolicInstruction] = deque()
@@ -100,16 +133,47 @@ class SolvingState:
             return self.get_new_variable_iteration(name)
         return self.symbolic_variables[name][len(self.symbolic_variables[name]) - 1]
     
+    def make_var_of_type(self, seed_node: str, seed_type: type, graph: dict[str, list[str]], typed_vars: dict[str,type]):
+        if seed_node in typed_vars.keys():
+            # Hit before check
+            if typed_vars[seed_node] == seed_type:
+                # Fine
+                return
+            else:
+                print(f"ERROR: TYPE CONFLICT", file=sys.stderr)
+                return
+        else:
+            # Unseen
+            typed_vars[seed_node] = seed_type
+            for neighbor in graph[seed_node]:
+                self.make_var_of_type(neighbor, seed_type, graph, typed_vars)
+
     def check_solvability(self) -> bool:
+        # Construct Type Graph
+        type_seeds: list[tuple[str,type]] = []
+        type_graph: dict[str, list[str]] = {}
+        for var_iterations in self.symbolic_variables.values():
+            for v_iter in var_iterations:
+                type_graph[v_iter.name] = []
+        for c in self.constraints:
+            c.add_connections(type_graph, type_seeds)
+        # Through Type Graph
+        typed_vars: dict[str,type] = {}
+        for seed, seed_type in type_seeds:
+            self.make_var_of_type(seed,seed_type,type_graph,typed_vars)
+        # print(type_graph)
+        # print(typed_vars)
+
         made_vars: dict[str,Any] = {}
         for var_iterations in self.symbolic_variables.values():
             for v_iter in var_iterations:
-                made_vars[v_iter.name] = Int(v_iter.name)
+                made_vars[v_iter.name] = gen_solver_var(v_iter.name,typed_vars.get(v_iter.name, None))
+
         solver = Solver()
         for c in self.constraints:
             c.gen_solver_constraint(solver, made_vars)
         print(solver.assertions())
         satisfiability = solver.check()
-        # if satisfiability == sat:
-        #     print(solver.model())
+        if satisfiability == sat:
+            print(solver.model())
         return satisfiability == sat

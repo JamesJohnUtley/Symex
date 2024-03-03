@@ -5,15 +5,21 @@ s = Solver()
  
 # Declare our variables: "pie_price", which we know the 
 # value of, "num_pies", which we don't, and "pies_owing", which depends upon the values of the other two
-pie_price = Real('pie_price')
-num_pies = Int('num_pies')
-pies_owing = pie_price * num_pies
+# pie_price = Real('pie_price')
+# num_pies = Int('num_pies')
+# pies_owing = pie_price * num_pies
  
-# Assert that pie_price is equal to 3.14
-s.add(pie_price == 3.14)
+# # Assert that pie_price is equal to 3.14
+# s.add(pie_price == 3.14)
  
-# Assert that pies_owing is greater than 10
-s.add(pies_owing > 10)
+# # Assert that pies_owing is greater than 10
+# s.add(pies_owing > 10)
+a = String('a')
+b = String('b')
+c = String('c')
+s.add(a == 'ab')
+s.add(b == 'cd')
+s.add(c == a + b)
 # s.add(pies_owing > 20)
 # Ask if these these can be true at the same time
 s.check() # returns "sat" - they can be!!

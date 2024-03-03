@@ -8,6 +8,16 @@ def cond_test(a):
         return 15
     return b
 
+def type_test():
+    a = 1
+    b = a
+    c = b
+    d = 'a'
+    e = d
+    f = e
+    f = c
+    return f
+
 def basic_cond(x):
     if x > 5:
         x = 2
