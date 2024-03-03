@@ -5,17 +5,17 @@ from collections import deque
 from dis import Instruction
 from typing import List, Any, Dict
 from z3 import *
-from solving import SolvingState, SymbolicInstruction
+from solving import SolvingState, SymbolicInstruction, SymbolicConstraint, SymbolicVariable
 from const_variables import *
 
 class ReturnInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
         self.requested_items = 1
         ss.hunting_stack.append(self)
-        self.out_var = ss.get_current_variable_iteration(OUT_CV)
+        self.out_var: SymbolicVariable = ss.get_current_variable_iteration(OUT_CV)
     def execute(self, ss: SolvingState):
         print(f"Return {self.given_items[0]}")
-        ss.solver.add(self.out_var == self.given_items[0])
+        ss.constraints.append(SymbolicConstraint(self.out_var, self.given_items[0], operator.eq))
 
 class LoadFastInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
@@ -25,10 +25,10 @@ class StoreFastInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
         self.requested_items = 1
         ss.hunting_stack.append(self)
-        self.set_iteration = ss.get_current_variable_iteration(self.instruction.argval)
+        self.set_iteration: SymbolicVariable = ss.get_current_variable_iteration(self.instruction.argval)
         ss.get_new_variable_iteration(self.instruction.argval)
     def execute(self, ss: SolvingState):
-        ss.solver.add(self.set_iteration == self.given_items[0])
+        ss.constraints.append(SymbolicConstraint(self.set_iteration, self.given_items[0], operator.eq))
 
 class ResumeInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
@@ -58,12 +58,12 @@ class BinaryOpInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
         self.requested_items = 2
         ss.hunting_stack.append(self)
-        self.binop_var = ss.get_new_variable_iteration(BIN_CV)
+        self.binop_var: SymbolicVariable = ss.get_new_variable_iteration(BIN_CV)
     def execute(self, ss: SolvingState):
         if self.instruction.argrepr not in BINARY_OPERATORS.keys():
             print(f"ERROR: Binary Operator {self.instruction.argrepr} Undefined")
             return
-        ss.solver.add(self.binop_var == BINARY_OPERATORS[self.instruction.argrepr](self.given_items[0], self.given_items[1]))
+        ss.constraints.append(SymbolicConstraint(self.binop_var,self.given_items[0],operator.eq,BINARY_OPERATORS[self.instruction.argrepr],self.given_items[1]))
         ss.avaliability_stack.append(self.binop_var)
 
 
@@ -95,7 +95,7 @@ class PopJumpForwardIfFalseInstruction(SymbolicInstruction):
             comparator = COMPARE_OPERATORS[FLIP_OPERATORS[self.given_items[2]]]
         else:
             comparator = COMPARE_OPERATORS[self.given_items[2]]
-        ss.solver.add(comparator(self.given_items[0], self.given_items[1]))
+        ss.constraints.append(SymbolicConstraint(self.given_items[0], self.given_items[1], comparator))
 
 class PopJumpForwardIfTrueInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
@@ -107,7 +107,7 @@ class PopJumpForwardIfTrueInstruction(SymbolicInstruction):
             comparator = COMPARE_OPERATORS[self.given_items[2]]
         else:
             comparator = COMPARE_OPERATORS[FLIP_OPERATORS[self.given_items[2]]]
-        ss.solver.add(comparator(self.given_items[0], self.given_items[1]))
+        ss.constraints.append(SymbolicConstraint(self.given_items[0],self.given_items[1],comparator))
 
 class CompareOpInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):

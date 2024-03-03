@@ -142,9 +142,8 @@ def traverse_block(block: InstructionBlock, ss: SolvingState = SolvingState()) -
         symins: SymbolicInstruction = symbolic_instructions[instructions[i].opname](instructions[i])
         symins.load(ss)
         ss.resolve_instructions()
-    print(ss.solver.assertions())
-    solution = ss.solver.check()
-    if solution == sat:
+    solution = ss.check_solvability()
+    if solution:
         # Get the model
         # model = ss.solver.model()
         # Print the values of the variables
@@ -152,7 +151,7 @@ def traverse_block(block: InstructionBlock, ss: SolvingState = SolvingState()) -
         print("Satisfiable")
     else:
         print("Unsatisfiable")
-    return ss.solver.check() == sat
+    return solution
     
 def find_block_offset(offset: int, blocks: Dict[int,InstructionBlock]) -> InstructionBlock:
     for x in blocks.values():

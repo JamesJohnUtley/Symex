@@ -17,7 +17,7 @@ def basic_str():
     return 'abc'
 
 def true_cond(x):
-    # x = 1
+    x = 1
     if x > 5 or x == 2:
         x = 2
     return x
