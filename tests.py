@@ -39,9 +39,10 @@ def single_block():
 
 def print_test(x):
     if x < 15:
-        ValueError('error')
+        print('error')
     else:
-        ValueError('print')
+        print('print')
+    print('last')
     return 5
 
 def math_block():

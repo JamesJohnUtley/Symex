@@ -87,17 +87,34 @@ class SolvingState:
                  avaliability_stack: deque = None,
                  constraints: List[SymbolicConstraint] = None,
                  symbolic_variables: Dict[str,List[Any]] = None,
-                 output = None
+                 specialized_variables_count: Dict[str,int] = None,
+                 output = None,
+                 prints: List[str] = None,
+                 errors: List[str] = None
                  ):
         self.hunting_stack: deque[SymbolicInstruction] = hunting_stack if hunting_stack is not None else deque() # Stack of instructions and requested variables
         self.avaliability_stack: deque = avaliability_stack if avaliability_stack is not None else deque() # Stack of symbols and constants
         self.constraints: List[SymbolicConstraint] = constraints if constraints is not None else []
         self.symbolic_variables: Dict[str,List[Any]] = symbolic_variables if symbolic_variables is not None else {}
+        self.specialized_variables_count: Dict[str,int] = specialized_variables_count if specialized_variables_count is not None else None
+        if self.specialized_variables_count is None:
+            self.specialized_variables_count = {}
+            self.specialized_variables_count[PRINT_CV] = 0
+            self.specialized_variables_count[ERROR_CV] = 0
         self.last_was_jump = False
         # Set out
         if output != None:
             out_var = self.get_new_variable_iteration(OUT_CV)
             self.constraints.append(SymbolicConstraint(int(output),out_var,operator.eq))
+        # Set Special Variables
+        if prints != None:
+            for print_output in prints:
+                print_var = self.get_new_variable_iteration(PRINT_CV)
+                self.constraints.append(SymbolicConstraint(print_output,print_var,operator.eq))
+        if errors != None:
+            for error_output in errors:
+                error_var = self.get_new_variable_iteration(ERROR_CV)
+                self.constraints.append(SymbolicConstraint(error_output,error_var,operator.eq))
 
     def copy(self):
         copied_hunting_stack: deque[SymbolicInstruction] = deque()
@@ -109,7 +126,10 @@ class SolvingState:
         copied_symbolic_variables: Dict[str, List[Any]] = {}
         for name in self.symbolic_variables.keys():
             copied_symbolic_variables[name] = self.symbolic_variables[name].copy()
-        return SolvingState(copied_hunting_stack,self.avaliability_stack.copy(),copied_constraints,copied_symbolic_variables)
+        copied_specialized_vars_count: Dict[str,int] = {}
+        for var in self.specialized_variables_count.keys():
+            copied_specialized_vars_count[var] = self.specialized_variables_count[var]
+        return SolvingState(copied_hunting_stack,self.avaliability_stack.copy(),copied_constraints,copied_symbolic_variables,copied_specialized_vars_count)
     
     def resolve_instructions(self):
         # Check if instructions are avaliable for execution
@@ -133,6 +153,18 @@ class SolvingState:
         if name not in self.symbolic_variables.keys():
             return self.get_new_variable_iteration(name)
         return self.symbolic_variables[name][len(self.symbolic_variables[name]) - 1]
+    
+    def get_specialized_variable_iteration(self, name: str):
+        sym_var = None
+        # Check that actually exists
+        if name not in self.symbolic_variables.keys():
+            sym_var = self.get_new_variable_iteration(name)
+        elif self.specialized_variables_count[name] >= len(self.symbolic_variables[name]):
+            sym_var = self.get_new_variable_iteration(name)
+        else:
+            sym_var = self.symbolic_variables[name][self.specialized_variables_count[name]]
+        self.specialized_variables_count[name] += 1
+        return sym_var
     
     def make_var_of_type(self, seed_node: str, seed_type: type, graph: dict[str, list[str]], typed_vars: dict[str,type]):
         if seed_node in typed_vars.keys():

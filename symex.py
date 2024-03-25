@@ -39,11 +39,8 @@ class InstructionBlock:
         
 
 def main(args):
-    # dis.dis(cond_test)
-    # disasm = list(cond_test.__code__.co_code)
-    # print(disasm)
-    # print(args.output)
     print(f"BREAKING: {args.function_name}")
+    # Breakdown Arguments
     if args.bre:
         for x in dis.get_instructions(globals()[args.function_name]):
             print(x)
@@ -54,6 +51,22 @@ def main(args):
     if args.run:
         print(f"Out: {globals()[args.function_name]()}")
         return 0
+    
+    # Set Prints
+    prints = None
+    if args.prints != None:
+        prints = []
+        with open(args.prints) as prints_file:
+            for line in prints_file:
+                prints.append(line.strip())
+        prints.reverse()
+    errors = None
+    if args.errors != None:
+        errors = []
+        with open(args.errors) as errors_file:
+            for line in errors_file:
+                errors.append(line.strip())
+        errors.reverse()
 
     instructions: List[Instruction] = []
     for x in dis.get_instructions(globals()[args.function_name]):
@@ -69,8 +82,7 @@ def main(args):
         return 0
 
     for end_block in end_blocks:
-        build_paths(end_block, jump_edges, base_solve_state=SolvingState(output=args.output))
-    # traverse_block(blocks[0])
+        build_paths(end_block, jump_edges, base_solve_state=SolvingState(output=args.output, prints=prints, errors=errors))
         
 def build_paths(last_block: InstructionBlock, jump_edges: Set[Tuple[int,int]], depth: int = 0, prefix_path: List[InstructionBlock] = [], base_solve_state: SolvingState = None):
     base_solve_state = base_solve_state if base_solve_state is not None else SolvingState()
@@ -173,6 +185,8 @@ if __name__ == "__main__":
     parser.add_argument('-r', '--run', action='store_true', help='Run the function')
     parser.add_argument('-f', '--cf', action='store_true', help='Print out the control flow of the function')
     parser.add_argument('-o', '--output', help='Add a requirement for output to be a certain value', required=False)
+    parser.add_argument('-p', '--prints', help='Add a requirement for prints to be equivalent to a certain file', required=False)
+    parser.add_argument('-e', '--errors', help='Add a requirement for errors to be equivalent to a certain file', required=False)
     args = parser.parse_args()
     main(args)
     sys.exit(0)
