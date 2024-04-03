@@ -38,3 +38,4 @@ if s.check() == sat:
     print([simplify(c) for c in s.assertions()])
     print("Model:")
     print(model)
+    print(model[a])

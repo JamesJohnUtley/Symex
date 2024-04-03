@@ -15,12 +15,13 @@ class ReturnInstruction(SymbolicInstruction):
         ss.hunting_stack.append(self)
         self.out_var: SymbolicVariable = ss.get_current_variable_iteration(OUT_CV)
     def execute(self, ss: SolvingState):
-        print(f"Return {self.given_items[0]}")
+        # print(f"Return {self.given_items[0]}")
         ss.constraints.append(SymbolicConstraint(self.out_var, self.given_items[0], operator.eq))
 
 class LoadFastInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
         ss.avaliability_stack.append(ss.get_current_variable_iteration(self.instruction.argval))
+        ss.unstored_variables.add(self.instruction.argval)
 
 class StoreFastInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
@@ -28,6 +29,7 @@ class StoreFastInstruction(SymbolicInstruction):
         ss.hunting_stack.append(self)
         self.set_iteration: SymbolicVariable = ss.get_current_variable_iteration(self.instruction.argval)
         ss.get_new_variable_iteration(self.instruction.argval)
+        ss.unstored_variables.remove(self.instruction.argval)
     def execute(self, ss: SolvingState):
         ss.constraints.append(SymbolicConstraint(self.set_iteration, self.given_items[0], operator.eq))
 

@@ -9,6 +9,7 @@ import argparse
 from tests import *
 from symins import *
 from solving import SolvingState, SymbolicInstruction
+from FVSs import FeasibleValueSet
 
 
 follow_lead_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE', 'JUMP_FORWARD']
@@ -94,10 +95,14 @@ def build_paths(last_block: InstructionBlock, jump_edges: Set[Tuple[int,int]], d
 
     # Attempt to solve
     if(traverse_block(last_block, base_solve_state)):
-        for neighbor in last_block.predecessors:
-            new_ss: SolvingState = base_solve_state.copy()
-            new_ss.last_was_jump = (neighbor.id, last_block.id) in jump_edges
-            build_paths(neighbor, jump_edges, depth +  1, path, new_ss)
+        if len(last_block.predecessors) != 0: 
+            for neighbor in last_block.predecessors:
+                new_ss: SolvingState = base_solve_state.copy()
+                new_ss.last_was_jump = (neighbor.id, last_block.id) in jump_edges
+                build_paths(neighbor, jump_edges, depth +  1, path, new_ss)
+        else:
+            print("Find Feasible Value Set")
+            fvs = FeasibleValueSet(base_solve_state)
 
 def construct_cfg(instructions: List[Instruction]) -> Tuple[Dict[int,InstructionBlock], List[InstructionBlock], Set[Tuple[int,int]]]:
     # Construct Nodes
@@ -158,7 +163,7 @@ def traverse_block(block: InstructionBlock, ss: SolvingState = SolvingState()) -
         symins: SymbolicInstruction = symbolic_instructions[instructions[i].opname](instructions[i])
         symins.load(ss)
         ss.resolve_instructions()
-    solution = ss.check_solvability()
+    solution, _ = ss.check_solvability()
     if solution:
         # Get the model
         # model = ss.solver.model()

@@ -1,7 +1,7 @@
 from collections import deque
 from dis import Instruction
 from z3 import *
-from typing import Dict, List, Any, Callable
+from typing import Dict, List, Any, Callable, Tuple
 from const_variables import *
 import operator
 
@@ -88,6 +88,7 @@ class SolvingState:
                  constraints: List[SymbolicConstraint] = None,
                  symbolic_variables: Dict[str,List[Any]] = None,
                  specialized_variables_count: Dict[str,int] = None,
+                 unstored_variables: set[str] = None,
                  output = None,
                  prints: List[str] = None,
                  errors: List[str] = None
@@ -96,6 +97,7 @@ class SolvingState:
         self.avaliability_stack: deque = avaliability_stack if avaliability_stack is not None else deque() # Stack of symbols and constants
         self.constraints: List[SymbolicConstraint] = constraints if constraints is not None else []
         self.symbolic_variables: Dict[str,List[Any]] = symbolic_variables if symbolic_variables is not None else {}
+        self.unstored_variables: set = unstored_variables if unstored_variables is not None else set()
         self.specialized_variables_count: Dict[str,int] = specialized_variables_count if specialized_variables_count is not None else None
         if self.specialized_variables_count is None:
             self.specialized_variables_count = {}
@@ -129,7 +131,12 @@ class SolvingState:
         copied_specialized_vars_count: Dict[str,int] = {}
         for var in self.specialized_variables_count.keys():
             copied_specialized_vars_count[var] = self.specialized_variables_count[var]
-        return SolvingState(copied_hunting_stack,self.avaliability_stack.copy(),copied_constraints,copied_symbolic_variables,copied_specialized_vars_count)
+        return SolvingState(copied_hunting_stack,
+                            self.avaliability_stack.copy(),
+                            copied_constraints,
+                            copied_symbolic_variables,
+                            copied_specialized_vars_count,
+                            self.unstored_variables.copy())
     
     def resolve_instructions(self):
         # Check if instructions are avaliable for execution
@@ -181,7 +188,7 @@ class SolvingState:
             for neighbor in graph[seed_node]:
                 self.make_var_of_type(neighbor, seed_type, graph, typed_vars)
 
-    def check_solvability(self) -> bool:
+    def check_solvability(self, var_to_grab: Any = None) -> Tuple[bool, Any]:
         # Construct Type Graph
         type_seeds: list[tuple[str,type]] = []
         type_graph: dict[str, list[str]] = {}
@@ -205,8 +212,11 @@ class SolvingState:
         solver = Solver()
         for c in self.constraints:
             c.gen_solver_constraint(solver, made_vars)
-        print(solver.assertions())
+        # print(solver.assertions())
         satisfiability = solver.check()
-        if satisfiability == sat:
-            print(solver.model())
-        return satisfiability == sat
+        if satisfiability == sat and var_to_grab is not None:
+            model = solver.model()
+            # print(model)
+            return (satisfiability == sat, model[made_vars[var_to_grab.name]])
+        else:
+            return (satisfiability == sat, None)
