@@ -217,6 +217,7 @@ class SolvingState:
         if satisfiability == sat and var_to_grab is not None:
             model = solver.model()
             # print(model)
-            return (satisfiability == sat, model[made_vars[var_to_grab.name]])
+            value: int = model[made_vars[var_to_grab.name]].as_long()
+            return (satisfiability == sat, value)
         else:
             return (satisfiability == sat, None)

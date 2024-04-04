@@ -38,7 +38,7 @@ def single_block():
     return c
 
 def print_test(x):
-    if x < 15:
+    if x < 200 and x > 20:
         print('error')
     else:
         print('print')
