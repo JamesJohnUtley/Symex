@@ -30,8 +30,8 @@ class FeasibleValueSet:
     # Upper Bound, PE, Lower bound
     def get_bounds(self) -> Tuple[int, float, int]:
         if len(self.base_solver.unstored_variables) == 0:
-            print("ERROR: ALL NO UNKNOWN",file=sys.stdout)
-            return (self.possibility_range[1],) * 3
+            print("ERROR: NO UNKNOWN",file=sys.stdout)
+            return (self.possibility_range[1] - self.possibility_range[0] + 1,) * 3
         self.unknown_sym_var = self.base_solver.get_current_variable_iteration(next(iter(self.base_solver.unstored_variables)))
         self._build_set()
         # Count
