@@ -45,10 +45,10 @@ def print_test(x):
     print('last')
     return 5
 
-def math_block(d, b):
+def math_block(d):
     # d = 9
     d = 3 * d
-    # b = 2
+    b = 2
     if d < 10:
         b = d - b
         c = b + b

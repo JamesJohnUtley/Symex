@@ -29,7 +29,8 @@ class StoreFastInstruction(SymbolicInstruction):
         ss.hunting_stack.append(self)
         self.set_iteration: SymbolicVariable = ss.get_current_variable_iteration(self.instruction.argval)
         ss.get_new_variable_iteration(self.instruction.argval)
-        ss.unstored_variables.remove(self.instruction.argval)
+        if self.instruction.argval in ss.unstored_variables:
+            ss.unstored_variables.remove(self.instruction.argval)
     def execute(self, ss: SolvingState):
         ss.constraints.append(SymbolicConstraint(self.set_iteration, self.given_items[0], operator.eq))
 

@@ -212,7 +212,8 @@ class SolvingState:
         solver = Solver()
         for c in self.constraints:
             c.gen_solver_constraint(solver, made_vars)
-        # print(solver.assertions())
+        # if var_to_grab is None:
+        #     print(solver.assertions())
         satisfiability = solver.check()
         if satisfiability == sat and var_to_grab is not None:
             model = solver.model()

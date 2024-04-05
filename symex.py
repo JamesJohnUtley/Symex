@@ -9,13 +9,13 @@ import argparse
 from tests import *
 from symins import *
 from solving import SolvingState, SymbolicInstruction
+from const_variables import MAX_DEPTH, RUN_DEFAULT_VALUE
 from FVSs import FeasibleValueSet
+from symutils import get_qu_bounds
 
 
 follow_lead_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE', 'JUMP_FORWARD']
 conditional_jump_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE']
-
-MAX_DEPTH: int = 10
 
 class InstructionBlock:
     def __init__(self, offset: int, offset_instructions: int, id: int):
@@ -37,7 +37,11 @@ class InstructionBlock:
 
     def set_end_block(self):
         self.end_block = True
-        
+
+class FeasiblePath:
+    def __init__(self, path: List[InstructionBlock], solving_state: SolvingState):
+        self.path = path
+        self.solving_state = solving_state
 
 def main(args):
     print(f"BREAKING: {args.function_name}")
@@ -49,8 +53,11 @@ def main(args):
     if args.dis:
         dis.dis(globals()[args.function_name])
         return 0
-    if args.run:
-        print(f"Out: {globals()[args.function_name]()}")
+    if args.run is not None:
+        if args.run == RUN_DEFAULT_VALUE:
+            print(f"Out: {globals()[args.function_name]()}")
+        else:
+            print(f"Out: {globals()[args.function_name](int(args.run))}")
         return 0
     
     # Set Prints
@@ -82,10 +89,27 @@ def main(args):
         print(f"{[x.id for x in end_blocks]}")
         return 0
 
+    end_paths: List[FeasiblePath] = []
     for end_block in end_blocks:
-        build_paths(end_block, jump_edges, base_solve_state=SolvingState(output=args.output, prints=prints, errors=errors))
-        
-def build_paths(last_block: InstructionBlock, jump_edges: Set[Tuple[int,int]], depth: int = 0, prefix_path: List[InstructionBlock] = [], base_solve_state: SolvingState = None):
+        build_paths(end_paths, end_block, jump_edges, base_solve_state=SolvingState(output=args.output, prints=prints, errors=errors))
+    # Find FVS sizes
+    print("Found")
+    total_bounds = (0,0,0)
+    for end_path in end_paths:
+        print(f"{[x.id for x in end_path.path]}")
+        fvs = FeasibleValueSet(end_path.solving_state)
+        bounds = fvs.get_bounds()
+        total_bounds = tuple(x + y for x, y in zip(total_bounds, bounds))
+        print(f"ub: {bounds[0]}, pe: {bounds[1]}, lb: {bounds[2]}")
+    print(f"TB: {total_bounds}")
+    print(f"QU: {get_qu_bounds(total_bounds)}")
+
+def build_paths(end_paths: List[FeasiblePath],
+                last_block: InstructionBlock,
+                jump_edges: Set[Tuple[int,int]],
+                depth: int = 0,
+                prefix_path: List[InstructionBlock] = [],
+                base_solve_state: SolvingState = None):
     base_solve_state = base_solve_state if base_solve_state is not None else SolvingState()
     if depth >= MAX_DEPTH:
         return
@@ -99,10 +123,9 @@ def build_paths(last_block: InstructionBlock, jump_edges: Set[Tuple[int,int]], d
             for neighbor in last_block.predecessors:
                 new_ss: SolvingState = base_solve_state.copy()
                 new_ss.last_was_jump = (neighbor.id, last_block.id) in jump_edges
-                build_paths(neighbor, jump_edges, depth +  1, path, new_ss)
+                build_paths(end_paths, neighbor, jump_edges, depth +  1, path, new_ss)
         else:
-            print("Find Feasible Value Set")
-            fvs = FeasibleValueSet(base_solve_state)
+            end_paths.append(FeasiblePath(path,base_solve_state))
 
 def construct_cfg(instructions: List[Instruction]) -> Tuple[Dict[int,InstructionBlock], List[InstructionBlock], Set[Tuple[int,int]]]:
     # Construct Nodes
@@ -149,7 +172,6 @@ def construct_cfg(instructions: List[Instruction]) -> Tuple[Dict[int,Instruction
         else:
             # One Successor
             x.add_successor(x.following_block)
-
     return (blocks, end_blocks, jump_edges)
 
 # Returns satisfiability
@@ -166,9 +188,7 @@ def traverse_block(block: InstructionBlock, ss: SolvingState = SolvingState()) -
     solution, _ = ss.check_solvability()
     if solution:
         # Get the model
-        # model = ss.solver.model()
         # Print the values of the variables
-        # print(model)
         print("Satisfiable")
     else:
         print("Unsatisfiable")
@@ -187,7 +207,7 @@ if __name__ == "__main__":
                         help='Function to run on')
     parser.add_argument('-d', '--dis', action='store_true', help='Print out the dissassembled form of the function')
     parser.add_argument('-b', '--bre', action='store_true', help='Print out the dissassembled instruction objects of the function')
-    parser.add_argument('-r', '--run', action='store_true', help='Run the function')
+    parser.add_argument('-r', '--run', help='Run the function', nargs='?', const=RUN_DEFAULT_VALUE, required=False)
     parser.add_argument('-f', '--cf', action='store_true', help='Print out the control flow of the function')
     parser.add_argument('-o', '--output', help='Add a requirement for output to be a certain value', required=False)
     parser.add_argument('-p', '--prints', help='Add a requirement for prints to be equivalent to a certain file', required=False)

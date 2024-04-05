@@ -1,14 +1,21 @@
 
 from solving import SolvingState, SymbolicInstruction, SymbolicConstraint
 from typing import List, Tuple, Set, Any
-from const_variables import INT_MIN_MAX, EXCLUDE_FOUND, FEASIBILITY_DIVISIONS
+from const_variables import INT_MIN_MAX, EXCLUDE_FOUND, FEASIBILITY_DIVISIONS, DRAWS
 from queue import Queue
 from symutils import *
 import sys
 import operator
+import random
 
 # (Min, Max), Feasible Values Inside
-FeasibilityRange = Tuple[Tuple[int, int], Set[int]]
+class FeasibilityRange:
+    def __init__(self, value_range: Tuple[int,int], feasibility_set: Set[int]):
+        self.value_range = value_range
+        self.feasibility_set = feasibility_set
+        self.mid = ((value_range[1] - value_range[0]) // 2) + value_range[0]
+        self.size = (value_range[1] - value_range[0] + 1)
+        self.unknown_count = self.size - len(feasibility_set)
 
 class FeasibleValueSet:
     def __init__(self, base_solver: SolvingState, possibility_range: Tuple[int,int] = INT_MIN_MAX): # Make this multiple
@@ -18,45 +25,77 @@ class FeasibleValueSet:
         self.feasible_values: Set[int] = set()
         if len(base_solver.unstored_variables) > 1:
             print("ERROR: Multiple Unknown Variables",file=sys.stdout)
-        elif len(base_solver.unstored_variables) == 0:
-            # TODO: FIX THIS SHOULD NOT ERROR
-            print("ERROR: ALL FEASIBLE",file=sys.stdout)
-        else:
-            print(f"Unknown: {base_solver.unstored_variables}")
-            self.unknown_sym_var = self.base_solver.get_current_variable_iteration(next(iter(base_solver.unstored_variables)))
-            self._build_set()
+
+
+    # Upper Bound, PE, Lower bound
+    def get_bounds(self) -> Tuple[int, float, int]:
+        if len(self.base_solver.unstored_variables) == 0:
+            print("ERROR: ALL NO UNKNOWN",file=sys.stdout)
+            return (self.possibility_range[1],) * 3
+        self.unknown_sym_var = self.base_solver.get_current_variable_iteration(next(iter(self.base_solver.unstored_variables)))
+        self._build_set()
+        # Count
+        feasible_count, unknown_count, total_count = self._count()
+        # Construct Weights
+        frs_weights: List[float] = self._construct_weights(total_count)
+        # Estimate
+        feasiblity_estimate: float = self._estimate_feasibility(frs_weights)
+        ub = feasible_count + unknown_count
+        pe = feasible_count + unknown_count * feasiblity_estimate
+        lb = feasible_count
+        return (ub, pe, lb)
     
     def _build_set(self):
         minmax = self._find_min_max()
         print(minmax)
-        print(self.feasible_values)
-        feasible_ranges: Queue[FeasibilityRange] = Queue()
-        feasible_ranges.put((minmax, self.feasible_values))
+        frs_to_divide: Queue[FeasibilityRange] = Queue()
+        frs_to_divide.put(FeasibilityRange(minmax, self.feasible_values))
         for _ in range(FEASIBILITY_DIVISIONS):
-            for x in self._divide_range(feasible_ranges.get()):
-                feasible_ranges.put(x)
-        # Count
-        print(get_qu(len(self.feasible_values)))
+            for x in self._divide_range(frs_to_divide.get()):
+                frs_to_divide.put(x)
+        self.frs: List[FeasibilityRange] = []
+        while not frs_to_divide.empty():
+            fr: FeasibilityRange = frs_to_divide.get()
+            if fr.unknown_count > 0:
+                self.frs.append(fr)
+
+    def _construct_weights(self, total_count: int) -> List[float]:
+        frs_weights: List[float] = []
+        for x in self.frs:
+            frs_weights.append(x.size / total_count)
+        return frs_weights
+
+    def _estimate_feasibility(self, frs_weights: List[float]) -> float:
+        found_unknown: int = 0
+        feasible_unknowns: int = 0
+        for x in random.choices(self.frs,frs_weights,k=DRAWS):
+            draw = random.randint(x.value_range[0], x.value_range[1])
+            if draw not in x.feasibility_set:
+                # Unknown Found
+                found_unknown += 1
+                if(self._query_value(draw)):
+                    feasible_unknowns += 1
+        return feasible_unknowns / found_unknown
+        # hit_ratio = found_unknown / DRAWS
+
+    def _count(self) -> Tuple[int,int,int]:
+        feasible_count = len(self.feasible_values)
         unknown_count: int = 0
-        while not feasible_ranges.empty():
-            fr: FeasibilityRange = feasible_ranges.get()
-            value_range = fr[0]
-            unknown_count += (value_range[1] - value_range[0] + 1) - len(fr[1])
-        print(get_qu(unknown_count))
+        total_count: int = 0
+        for fr in self.frs:
+            unknown_count += fr.unknown_count
+            total_count += fr.size
+        return (feasible_count, unknown_count, total_count)
 
-
-    def _divide_range(self, FR: FeasibilityRange) -> List[FeasibilityRange]:
-        value_range: Tuple[int,int] = FR[0]
-        feasible_values: Set[int] = FR[1]
+    def _divide_range(self, fr: FeasibilityRange) -> List[FeasibilityRange]:
         # Divide
-        mid = ((value_range[1] - value_range[0]) // 2) + value_range[0]
-        low_range: Tuple[int,int] = (value_range[0],mid)
-        high_range: Tuple[int,int] = (mid+1,value_range[1])
+        low_range: Tuple[int,int] = (fr.value_range[0],fr.mid)
+        high_range: Tuple[int,int] = (fr.mid+1,fr.value_range[1])
         # Divide Feasible Values
         low_set: Set[int] = set()
         high_set: Set[int] = set()
-        for x in feasible_values:
-            if x <= mid:
+        for x in fr.feasibility_set:
+            if x <= fr.mid:
                 low_set.add(x)
             else:
                 high_set.add(x)
@@ -66,12 +105,12 @@ class FeasibleValueSet:
         if feasible:
             low_set.add(found)
             self._record_feasible(found)
-            new_ranges.append(((low_range),low_set))
+            new_ranges.append(FeasibilityRange((low_range),low_set))
         feasible, found = self._query_range(high_range, True)
         if feasible:
             high_set.add(found)
             self._record_feasible(found)
-            new_ranges.append(((high_range),high_set))
+            new_ranges.append(FeasibilityRange((high_range),high_set))
         return new_ranges
 
 
@@ -127,8 +166,8 @@ class FeasibleValueSet:
         return solver.check_solvability(self.unknown_sym_var)
     
     # Returns True feasible False infeasible
-    def _query_value(self, value: int, use_excluded: bool = False) -> bool:
-        solver: SolvingState = self.base_solver.copy() if not use_excluded else self.solver_exluded.copy()
+    def _query_value(self, value: int) -> bool:
+        solver: SolvingState = self.base_solver.copy()
         solver.constraints.append(SymbolicConstraint(self.unknown_sym_var, value, operator.eq))
         feasible, _ = solver.check_solvability(self.unknown_sym_var)
         return feasible
