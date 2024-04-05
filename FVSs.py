@@ -39,7 +39,10 @@ class FeasibleValueSet:
         # Construct Weights
         frs_weights: List[float] = self._construct_weights(total_count)
         # Estimate
-        feasiblity_estimate: float = self._estimate_feasibility(frs_weights)
+        if unknown_count > 0:
+            feasiblity_estimate: float = self._estimate_feasibility(frs_weights)
+        else:
+            feasiblity_estimate: float = 0
         ub = feasible_count + unknown_count
         pe = feasible_count + unknown_count * feasiblity_estimate
         lb = feasible_count
@@ -51,8 +54,9 @@ class FeasibleValueSet:
         frs_to_divide: Queue[FeasibilityRange] = Queue()
         frs_to_divide.put(FeasibilityRange(minmax, self.feasible_values))
         for _ in range(FEASIBILITY_DIVISIONS):
-            for x in self._divide_range(frs_to_divide.get()):
-                frs_to_divide.put(x)
+            if not frs_to_divide.empty():
+                for x in self._divide_range(frs_to_divide.get()):
+                    frs_to_divide.put(x)
         self.frs: List[FeasibilityRange] = []
         while not frs_to_divide.empty():
             fr: FeasibilityRange = frs_to_divide.get()
@@ -105,7 +109,7 @@ class FeasibleValueSet:
         if feasible:
             low_set.add(found)
             self._record_feasible(found)
-            new_ranges.append(FeasibilityRange((low_range),low_set))
+            new_ranges.append(FeasibilityRange((low_range),low_set)) # TODO: Only append if there are unknowns?
         feasible, found = self._query_range(high_range, True)
         if feasible:
             high_set.add(found)
@@ -127,7 +131,7 @@ class FeasibleValueSet:
         # Other check
         while range[1] - range[0] > 0: # While there is more than 1 value
             mid = ((range[1] - range[0]) // 2) + range[0]
-            feasible, found_feasible = self._query_range((mid+1,max)) # TODO: Save Feasible. (Maybe Add constraints to exclude?)
+            feasible, found_feasible = self._query_range((mid+1,max))
             if feasible:
                 range = (mid+1,range[1])
                 self._record_feasible(found_feasible)
@@ -147,7 +151,7 @@ class FeasibleValueSet:
             return min
         while range[1] - range[0] > 0: # While there is more than 1 value
             mid = ((range[1] - range[0]) // 2) + range[0]
-            feasible, found_feasible = self._query_range((min,mid)) # TODO: Save Feasible?
+            feasible, found_feasible = self._query_range((min,mid))
             if feasible:
                 range = (range[0],mid)
                 self._record_feasible(found_feasible)
