@@ -59,15 +59,17 @@ BINARY_OPERATORS = {
     }
 
 class BinaryOpInstruction(SymbolicInstruction):
+    def is_tainted(self):
+        return not self.instruction.argrepr in BINARY_OPERATORS.keys()
     def load(self, ss: SolvingState):
         self.requested_items = 2
         ss.hunting_stack.append(self)
         self.binop_var: SymbolicVariable = ss.get_new_variable_iteration(BIN_CV)
     def execute(self, ss: SolvingState):
-        if self.instruction.argrepr not in BINARY_OPERATORS.keys():
-            print(f"ERROR: Binary Operator {self.instruction.argrepr} Undefined")
-            return
-        ss.constraints.append(SymbolicConstraint(self.binop_var,self.given_items[0],operator.eq,BINARY_OPERATORS[self.instruction.argrepr],self.given_items[1]))
+        if self.instruction.argrepr in BINARY_OPERATORS.keys():
+            ss.constraints.append(SymbolicConstraint(self.binop_var,self.given_items[0],operator.eq,BINARY_OPERATORS[self.instruction.argrepr],self.given_items[1]))
+        else:
+            print(f"WARNING: Binary Operator {self.instruction.argrepr} Undefined")
         ss.avaliability_stack.append(self.binop_var)
 
 

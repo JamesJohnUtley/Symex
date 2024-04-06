@@ -17,16 +17,21 @@ class SymbolicInstruction:
 
     def load(self, ss):
         print("Error: SymbolicInstruction Not Implemented",file=sys.stderr)
+
     def execute(self, ss):
         print(self.instruction,file=sys.stderr)
         print(self.given_items,file=sys.stderr)
         print("Error: SymbolicInstruction Not Implemented",file=sys.stderr)
+
     def copy(self):
-        print("COPY SYMBOLIC INSTRUCTION")
-        print(self.instruction)
+        print("WARNING: COPY SYMBOLIC INSTRUCTION", file=sys.stderr)
+        print(self.instruction, file=sys.stderr)
         copied_given = self.given_items.copy()
         return self.__class__(self.instruction,self.requested_items,copied_given)
     
+    def is_tainted(self):
+        return False
+
 class SymbolicVariable:
     def __init__(self, name):
         self.name = name

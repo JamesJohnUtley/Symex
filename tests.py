@@ -58,6 +58,25 @@ def math_block(d):
     c = c * 5 + 5
     return c / 5
 
+def basic_concrete(x):
+    if x < 100:
+        w = 1
+    else:
+        parity = x % 2
+        if parity == 0:
+            w = 2
+        else:
+            if x > 1000:
+                return 2
+            else:
+                w = 3
+    return w
+
+def loop_test(x): # TODO: Implement pop_jump_backward
+    while x < 50:
+        x += 5
+    return x
+
 def register_user(username, age):
     if not username.isalnum():
         raise ValueError("Username must be alphanumeric")

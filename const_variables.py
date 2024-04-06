@@ -1,6 +1,7 @@
 from typing import Tuple
 # DEFAULTS
 RUN_DEFAULT_VALUE = "run_default_value"
+PROBLEMATIC_ID = -1
 # NAMES
 OUT_CV: str = "@out"
 BIN_CV: str = "@binop"

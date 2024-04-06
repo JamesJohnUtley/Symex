@@ -9,7 +9,7 @@ import argparse
 from tests import *
 from symins import *
 from solving import SolvingState, SymbolicInstruction
-from const_variables import MAX_DEPTH, RUN_DEFAULT_VALUE
+from const_variables import MAX_DEPTH, RUN_DEFAULT_VALUE, PROBLEMATIC_ID
 from FVSs import FeasibleValueSet
 from symutils import get_qu_bounds
 
@@ -27,6 +27,7 @@ class InstructionBlock:
         self.predecessors: List[InstructionBlock] = []
         self.following_block = None
         self.end_block = False
+        self.tainted = False
 
     def __str__(self):
         return f"{self.id}"
@@ -60,24 +61,70 @@ def main(args):
             print(f"Out: {globals()[args.function_name](int(args.run))}")
         return 0
     
+    end_paths = find_feasible_paths(args.function_name, args.prints, args.errors, args.output)
+    
+    evaluate_bounds(end_paths)
+
+def evaluate_bounds(end_paths: List[FeasiblePath]):
+    # Find Feasible Paths
+    print("Found")
+    if len(end_paths) == 0:
+        print("ERROR: No Feasible Paths Found", file=sys.stderr)
+        return
+    # Combine problematic paths
+    path_groups: Dict[int, List[FeasiblePath]] = {}
+    for end_path in end_paths:
+        problematic_id: int = PROBLEMATIC_ID
+        for block in reversed(end_path.path):
+            if block.tainted:
+                problematic_id = block.id
+                break
+        if problematic_id in path_groups.keys():
+            path_groups[problematic_id].append(end_path)
+        else:
+            path_groups[problematic_id] = [end_path]
+    total_bounds = (0,0,0)
+
+    # Find FVS sizes
+    # Individual Paths
+    if -1 in path_groups.keys():
+        print("Individual")
+        for end_path in path_groups[PROBLEMATIC_ID]:
+            print(f"{[x.id for x in end_path.path]}")
+            fvs = FeasibleValueSet([end_path.solving_state])
+            bounds = fvs.get_bounds()
+            total_bounds = tuple(x + y for x, y in zip(total_bounds, bounds))
+            print(f"ub: {bounds[0]}, pe: {bounds[1]}, lb: {bounds[2]}")
+    # Problematic Paths
+    for id in path_groups.keys():
+        print(f"Group: {id}")
+        for path in path_groups[id]:
+            print(f"{[x.id for x in path.path]}")
+        fvs = FeasibleValueSet([path.solving_state for path in path_groups[id]])
+        # bounds = fvs.get_bounds()
+        # total_bounds = tuple(x + y for x, y in zip(total_bounds, bounds))
+    print(f"TB: {total_bounds}")
+    print(f"QU: {get_qu_bounds(total_bounds)}")
+
+def find_feasible_paths(function_name: str, prints_filepath: str, errors_filepath: str, output: Any) -> List[FeasiblePath]:
     # Set Prints
     prints = None
-    if args.prints != None:
+    if prints_filepath != None:
         prints = []
-        with open(args.prints) as prints_file:
+        with open(prints_filepath) as prints_file:
             for line in prints_file:
                 prints.append(line.strip())
         prints.reverse()
     errors = None
-    if args.errors != None:
+    if errors_filepath != None:
         errors = []
-        with open(args.errors) as errors_file:
+        with open(errors_filepath) as errors_file:
             for line in errors_file:
                 errors.append(line.strip())
         errors.reverse()
 
     instructions: List[Instruction] = []
-    for x in dis.get_instructions(globals()[args.function_name]):
+    for x in dis.get_instructions(globals()[function_name]):
         instructions.append(x)
 
     blocks, end_blocks, jump_edges = construct_cfg(instructions)
@@ -91,18 +138,9 @@ def main(args):
 
     end_paths: List[FeasiblePath] = []
     for end_block in end_blocks:
-        build_paths(end_paths, end_block, jump_edges, base_solve_state=SolvingState(output=args.output, prints=prints, errors=errors))
-    # Find FVS sizes
-    print("Found")
-    total_bounds = (0,0,0)
-    for end_path in end_paths:
-        print(f"{[x.id for x in end_path.path]}")
-        fvs = FeasibleValueSet(end_path.solving_state)
-        bounds = fvs.get_bounds()
-        total_bounds = tuple(x + y for x, y in zip(total_bounds, bounds))
-        print(f"ub: {bounds[0]}, pe: {bounds[1]}, lb: {bounds[2]}")
-    print(f"TB: {total_bounds}")
-    print(f"QU: {get_qu_bounds(total_bounds)}")
+        build_paths(end_paths, end_block, jump_edges, base_solve_state=SolvingState(output=output, prints=prints, errors=errors))
+
+    return end_paths
 
 def build_paths(end_paths: List[FeasiblePath],
                 last_block: InstructionBlock,
@@ -180,10 +218,12 @@ def traverse_block(block: InstructionBlock, ss: SolvingState = SolvingState()) -
     for i in range(len(instructions) - 1, -1, -1):
         # print(instructions[i].opname)
         if instructions[i].opname not in symbolic_instructions.keys():
-            print(f"{instructions[i].opname} not implemented", file=sys.stderr)
+            print(f"ERROR: {instructions[i].opname} not implemented", file=sys.stderr)
             return
         symins: SymbolicInstruction = symbolic_instructions[instructions[i].opname](instructions[i])
         symins.load(ss)
+        if symins.is_tainted():
+            block.tainted = True
         ss.resolve_instructions()
     solution, _ = ss.check_solvability()
     if solution:
