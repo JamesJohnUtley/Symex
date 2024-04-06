@@ -101,8 +101,9 @@ def evaluate_bounds(end_paths: List[FeasiblePath]):
         for path in path_groups[id]:
             print(f"{[x.id for x in path.path]}")
         fvs = FeasibleValueSet([path.solving_state for path in path_groups[id]])
-        # bounds = fvs.get_bounds()
-        # total_bounds = tuple(x + y for x, y in zip(total_bounds, bounds))
+        bounds = fvs.get_bounds()
+        total_bounds = tuple(x + y for x, y in zip(total_bounds, bounds))
+        print(f"ub: {bounds[0]}, pe: {bounds[1]}, lb: {bounds[2]}")
     print(f"TB: {total_bounds}")
     print(f"QU: {get_qu_bounds(total_bounds)}")
 

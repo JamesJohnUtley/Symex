@@ -66,7 +66,7 @@ def basic_concrete(x):
         if parity == 0:
             w = 2
         else:
-            if x > 1000:
+            if x > 1073741823:
                 return 2
             else:
                 w = 3
