@@ -3,6 +3,7 @@ from dis import Instruction
 from z3 import *
 from typing import Dict, List, Any, Callable, Tuple
 from const_variables import *
+from symutils import OutputSummary
 import operator
 
 
@@ -94,9 +95,7 @@ class SolvingState:
                  symbolic_variables: Dict[str,List[Any]] = None,
                  specialized_variables_count: Dict[str,int] = None,
                  unstored_variables: set[str] = None,
-                 output = None,
-                 prints: List[str] = None,
-                 errors: List[str] = None
+                 output_summary: OutputSummary = None
                  ):
         self.hunting_stack: deque[SymbolicInstruction] = hunting_stack if hunting_stack is not None else deque() # Stack of instructions and requested variables
         self.avaliability_stack: deque = avaliability_stack if avaliability_stack is not None else deque() # Stack of symbols and constants
@@ -110,16 +109,16 @@ class SolvingState:
             self.specialized_variables_count[ERROR_CV] = 0
         self.last_was_jump = False
         # Set out
-        if output != None:
+        if output_summary != None:
             out_var = self.get_new_variable_iteration(OUT_CV)
-            self.constraints.append(SymbolicConstraint(int(output),out_var,operator.eq))
+            self.constraints.append(SymbolicConstraint(int(output_summary.output),out_var,operator.eq))
         # Set Special Variables
-        if prints != None:
-            for print_output in prints:
+        if output_summary != None:
+            for print_output in output_summary.prints:
                 print_var = self.get_new_variable_iteration(PRINT_CV)
                 self.constraints.append(SymbolicConstraint(print_output,print_var,operator.eq))
-        if errors != None:
-            for error_output in errors:
+        if output_summary != None:
+            for error_output in output_summary.errors:
                 error_var = self.get_new_variable_iteration(ERROR_CV)
                 self.constraints.append(SymbolicConstraint(error_output,error_var,operator.eq))
 

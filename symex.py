@@ -10,8 +10,8 @@ from tests import *
 from symins import *
 from solving import SolvingState, SymbolicInstruction
 from const_variables import MAX_DEPTH, RUN_DEFAULT_VALUE, PROBLEMATIC_ID
-from FVSs import FeasibleValueSet
-from symutils import get_qu_bounds
+from FVSs import FeasibleValueSet, FeasibleValueSetProblematic
+from symutils import get_qu_bounds, OutputSummary
 
 
 follow_lead_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE', 'JUMP_FORWARD']
@@ -61,11 +61,13 @@ def main(args):
             print(f"Out: {globals()[args.function_name](int(args.run))}")
         return 0
     
-    end_paths = find_feasible_paths(args.function_name, args.prints, args.errors, args.output)
+    output_summary = construct_output_summary(args.function_name, args.prints, args.errors, args.output)
     
-    evaluate_bounds(end_paths)
+    end_paths = find_feasible_paths(output_summary)
+    
+    evaluate_bounds(end_paths, output_summary)
 
-def evaluate_bounds(end_paths: List[FeasiblePath]):
+def evaluate_bounds(end_paths: List[FeasiblePath], output_summary: OutputSummary):
     # Find Feasible Paths
     print("Found")
     if len(end_paths) == 0:
@@ -91,41 +93,42 @@ def evaluate_bounds(end_paths: List[FeasiblePath]):
         print("Individual")
         for end_path in path_groups[PROBLEMATIC_ID]:
             print(f"{[x.id for x in end_path.path]}")
-            fvs = FeasibleValueSet([end_path.solving_state])
+            fvs = FeasibleValueSet([end_path.solving_state], output_summary)
             bounds = fvs.get_bounds()
             total_bounds = tuple(x + y for x, y in zip(total_bounds, bounds))
             print(f"ub: {bounds[0]}, pe: {bounds[1]}, lb: {bounds[2]}")
+        del path_groups[-1]
     # Problematic Paths
     for id in path_groups.keys():
         print(f"Group: {id}")
         for path in path_groups[id]:
             print(f"{[x.id for x in path.path]}")
-        fvs = FeasibleValueSet([path.solving_state for path in path_groups[id]])
+        fvs = FeasibleValueSetProblematic([path.solving_state for path in path_groups[id]], output_summary)
         bounds = fvs.get_bounds()
         total_bounds = tuple(x + y for x, y in zip(total_bounds, bounds))
         print(f"ub: {bounds[0]}, pe: {bounds[1]}, lb: {bounds[2]}")
     print(f"TB: {total_bounds}")
     print(f"QU: {get_qu_bounds(total_bounds)}")
 
-def find_feasible_paths(function_name: str, prints_filepath: str, errors_filepath: str, output: Any) -> List[FeasiblePath]:
+def construct_output_summary(function_name: str, prints_filepath: str, errors_filepath: str, output: Any) -> OutputSummary:
     # Set Prints
-    prints = None
+    prints = []
     if prints_filepath != None:
-        prints = []
         with open(prints_filepath) as prints_file:
             for line in prints_file:
                 prints.append(line.strip())
         prints.reverse()
-    errors = None
+    errors = []
     if errors_filepath != None:
-        errors = []
         with open(errors_filepath) as errors_file:
             for line in errors_file:
                 errors.append(line.strip())
         errors.reverse()
+    return OutputSummary(globals()[function_name], prints, errors, output)
 
+def find_feasible_paths(output_summary: OutputSummary) -> List[FeasiblePath]:
     instructions: List[Instruction] = []
-    for x in dis.get_instructions(globals()[function_name]):
+    for x in dis.get_instructions(output_summary.function):
         instructions.append(x)
 
     blocks, end_blocks, jump_edges = construct_cfg(instructions)
@@ -139,7 +142,7 @@ def find_feasible_paths(function_name: str, prints_filepath: str, errors_filepat
 
     end_paths: List[FeasiblePath] = []
     for end_block in end_blocks:
-        build_paths(end_paths, end_block, jump_edges, base_solve_state=SolvingState(output=output, prints=prints, errors=errors))
+        build_paths(end_paths, end_block, jump_edges, base_solve_state=SolvingState(output_summary=output_summary))
 
     return end_paths
 

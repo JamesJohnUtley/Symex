@@ -38,7 +38,7 @@ def single_block():
     return c
 
 def print_test(x):
-    if x < 200 and x > 20:
+    if x < 200:
         print('error')
     else:
         print('print')
@@ -59,14 +59,16 @@ def math_block(d):
     return c / 5
 
 def basic_concrete(x):
-    if x < 100:
-        w = 1
+    if x > 1024 or x < -1023:
+        return -1
+    if x <= 0:
+        w = 2
     else:
         parity = x % 2
         if parity == 0:
             w = 2
         else:
-            if x > 1073741823:
+            if x > 512:
                 return 2
             else:
                 w = 3

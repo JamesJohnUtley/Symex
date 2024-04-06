@@ -4,10 +4,11 @@ from typing import List, Tuple, Set, Any
 from const_variables import INT_MIN_MAX, EXCLUDE_FOUND, FEASIBILITY_DIVISIONS, DRAWS
 from queue import Queue
 from symutils import *
+from tests import *
 import sys
 import operator
 import random
-
+from io import StringIO
 # (Min, Max), Feasible Values Inside
 class FeasibilityRange:
     def __init__(self, value_range: Tuple[int,int], feasibility_set: Set[int]):
@@ -18,7 +19,8 @@ class FeasibilityRange:
         self.unknown_count = self.size - len(feasibility_set)
 
 class FeasibleValueSet:
-    def __init__(self, base_solvers: List[SolvingState], possibility_range: Tuple[int,int] = INT_MIN_MAX):
+    def __init__(self, base_solvers: List[SolvingState], output_summary: OutputSummary, possibility_range: Tuple[int,int] = INT_MIN_MAX):
+        self.output_summary: OutputSummary = output_summary
         self.possibility_range: Tuple[int,int] = possibility_range
         self.base_solvers: List[SolvingState] = base_solvers
         self.excluded_solvers: List[SolvingState] = []
@@ -28,10 +30,6 @@ class FeasibleValueSet:
         for base_solver in base_solvers:
             if len(base_solver.unstored_variables) > 1:
                 print("ERROR: Multiple Unknown Variables",file=sys.stdout)
-
-
-    # Upper Bound, PE, Lower bound
-    def get_bounds(self) -> Tuple[int, float, int]:
         for base_solver in self.base_solvers:
             if len(base_solver.unstored_variables) == 0:
                 print("ERROR: NO UNKNOWN",file=sys.stdout)
@@ -39,7 +37,11 @@ class FeasibleValueSet:
         self.unknown_sym_vars: Any = []
         for base_solver in self.base_solvers:
             self.unknown_sym_vars.append(base_solver.get_current_variable_iteration(next(iter(base_solver.unstored_variables))))
-        self._build_set()  # HERE
+
+
+    # Upper Bound, PE, Lower bound
+    def get_bounds(self) -> Tuple[int, float, int]:
+        self._build_set()
         # Count
         feasible_count, unknown_count, total_count = self._count()
         # Construct Weights
@@ -53,7 +55,7 @@ class FeasibleValueSet:
         pe = feasible_count + unknown_count * feasiblity_estimate
         lb = feasible_count
         return (ub, pe, lb)
-    
+
     def _build_set(self):
         minmax = self._find_min_max()
         print(minmax)
@@ -84,7 +86,7 @@ class FeasibleValueSet:
             if draw not in x.feasibility_set:
                 # Unknown Found
                 found_unknown += 1
-                if(self._query_value(draw)):
+                if(self._query_value(draw)): # Allow for concrete evaluation?
                     feasible_unknowns += 1
         return feasible_unknowns / found_unknown
         # hit_ratio = found_unknown / DRAWS
@@ -201,3 +203,74 @@ class FeasibleValueSet:
 
     def __str__(self):
         return "ERROR: To String for FVSs not Implemented yet"
+    
+class FeasibleValueSetProblematic(FeasibleValueSet):
+    def __init__(self, base_solvers: List[SolvingState], output_summary: OutputSummary, possibility_range: Tuple[int,int] = INT_MIN_MAX):
+        super().__init__(base_solvers, output_summary, possibility_range)
+
+    def get_bounds(self) -> Tuple[int, float, int]:
+        self._build_set()
+        # Count
+        feasible_count, unknown_count, total_count = self._count()
+        homeless_feasible: Set[int] = self._homeless_feasible()
+        # Construct Weights
+        frs_weights: List[float] = self._construct_weights(total_count, homeless_feasible)
+        # Estimate
+        feasiblity_estimate, valid_estimate = self._estimate_feasibility_validity(frs_weights, homeless_feasible)
+        print(valid_estimate)
+        ub = feasible_count + unknown_count
+        pe = (feasible_count + unknown_count * feasiblity_estimate) * valid_estimate # TODO: Allow for pure concrete?
+        lb = 0
+        return (ub, pe, lb)
+    
+    def _estimate_feasibility_validity(self, frs_weights: List[float], homeless_feasible: List[int]) -> Tuple[float, float]:
+        found_unknown: int = 0
+        feasible_unknowns: int = 0
+        feasibles_found: int = 0
+        valid_feasibles: int = 0
+        frs_plus = self.frs.copy()
+        frs_plus.append(None)
+        for fr in random.choices(frs_plus,frs_weights,k=DRAWS):
+            if fr is not None: # Draw from Feasible Value Range
+                draw = random.randint(fr.value_range[0], fr.value_range[1])
+            else: # Draw from homeless feasible
+                draw = random.choice(homeless_feasible)
+            # Evaluate Draw
+            feasible = draw in self.feasible_values
+            if not feasible: # Unknown
+                found_unknown += 1
+                if(self._query_value(draw)): # Check if feasible
+                    feasible_unknowns += 1
+                    feasible = True
+            if feasible: # Feasible
+                feasibles_found += 1
+                if(self._concrete_eval(draw)):
+                    valid_feasibles += 1
+        return (feasible_unknowns / found_unknown, valid_feasibles / feasibles_found)
+    
+    def _concrete_eval(self, draw: int) -> bool:
+        # Prep Capture
+        original_stdout = sys.stdout
+        new_stdout = StringIO()
+        sys.stdout = new_stdout
+        # Capture
+        return_value = self.output_summary.function(draw)
+        # Get Capture
+        captured_output = new_stdout.getvalue() # TODO: Check prints and errors
+        # Restore
+        sys.stdout = original_stdout
+        return int(return_value) == int(self.output_summary.output)
+    
+    def _construct_weights(self, total_count: int, homeless_feasible: Set[int]) -> List[float]:
+        weights = super()._construct_weights(total_count)
+        homeless_weight = len(homeless_feasible) / total_count
+        weights.append(homeless_weight)
+        return weights
+
+    def _homeless_feasible(self) -> Set[int]:
+        homeless = self.feasible_values.copy()
+        for fr in self.frs:
+            for x in fr.feasibility_set:
+                homeless.remove(x)
+        return homeless
+    
