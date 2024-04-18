@@ -11,7 +11,7 @@ from symins import *
 from solving import SolvingState, SymbolicInstruction
 from const_variables import MAX_DEPTH, RUN_DEFAULT_VALUE, PROBLEMATIC_ID
 from FVSs import FeasibleValueSet, FeasibleValueSetProblematic
-from symutils import get_qu_bounds, OutputSummary
+from symutils import get_qu_bounds, OutputSummary, construct_output_summary
 
 
 follow_lead_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE', 'JUMP_FORWARD']
@@ -109,22 +109,6 @@ def evaluate_bounds(end_paths: List[FeasiblePath], output_summary: OutputSummary
         print(f"ub: {bounds[0]}, pe: {bounds[1]}, lb: {bounds[2]}")
     print(f"TB: {total_bounds}")
     print(f"QU: {get_qu_bounds(total_bounds)}")
-
-def construct_output_summary(function_name: str, prints_filepath: str, errors_filepath: str, output: Any) -> OutputSummary:
-    # Set Prints
-    prints = []
-    if prints_filepath != None:
-        with open(prints_filepath) as prints_file:
-            for line in prints_file:
-                prints.append(line.strip())
-        prints.reverse()
-    errors = []
-    if errors_filepath != None:
-        with open(errors_filepath) as errors_file:
-            for line in errors_file:
-                errors.append(line.strip())
-        errors.reverse()
-    return OutputSummary(globals()[function_name], prints, errors, output)
 
 def find_feasible_paths(output_summary: OutputSummary) -> List[FeasiblePath]:
     instructions: List[Instruction] = []

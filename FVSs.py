@@ -250,16 +250,33 @@ class FeasibleValueSetProblematic(FeasibleValueSet):
     
     def _concrete_eval(self, draw: int) -> bool:
         # Prep Capture
+        # Stdout
         original_stdout = sys.stdout
         new_stdout = StringIO()
         sys.stdout = new_stdout
+        # Stderr
+        original_stderr = sys.stderr
+        new_stderr = StringIO()
+        sys.stderr = new_stderr
         # Capture
         return_value = self.output_summary.function(draw)
         # Get Capture
-        captured_output = new_stdout.getvalue() # TODO: Check prints and errors
+        captured_stdout = new_stdout.getvalue() # TODO: Check prints and errors
+        new_stdout.close()
+        captured_stderr = new_stderr.getvalue()
+        new_stderr.close()
         # Restore
         sys.stdout = original_stdout
-        return int(return_value) == int(self.output_summary.output)
+        sys.stderr = original_stderr
+
+        return self._concrete_output_summary(return_value, captured_stdout, captured_stderr) == self.output_summary
+    
+    def _concrete_output_summary(self, return_value: Any, captured_stdout: str, captured_stderr: str) -> OutputSummary:
+        prints: List[str] = captured_stdout.split('\n')[:-1]
+        prints.reverse()
+        errors: List[str] = captured_stderr.split('\n')[:-1]
+        errors.reverse()
+        return OutputSummary(self.output_summary.function, prints, errors,return_value)
     
     def _construct_weights(self, total_count: int, homeless_feasible: Set[int]) -> List[float]:
         weights = super()._construct_weights(total_count)

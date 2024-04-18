@@ -49,6 +49,22 @@ def print_test(x):
     print('last')
     return 5
 
+def concrete_print_test(x):
+    if x % 2 == 0:
+        print('error')
+    else:
+        print('print')
+    print('last')
+    return 5
+
+def concrete_errors_test(x):
+    if x % 2 == 0:
+        ValueError('error')
+    else:
+        ValueError('print')
+    ValueError('last')
+    return 5
+
 def math_block(d):
     # d = 9
     d = 3 * d
