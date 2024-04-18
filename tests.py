@@ -37,6 +37,10 @@ def single_block():
     c = b
     return c
 
+def print_leak(x):
+    print(x)
+    return x
+
 def print_test(x):
     if x < 200:
         print('error')
@@ -111,4 +115,4 @@ def no_call_error():
         print("Error:", e)
 
 if __name__ == '__main__':
-    no_call_error()
+    print(f"Out: {cond_test(3)}")
