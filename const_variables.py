@@ -15,3 +15,4 @@ EXCLUDE_FOUND: bool = True # Excludes found feasible values from searches, adds 
 FEASIBILITY_DIVISIONS: int = 16 # Number of times to divide unknown ranges recommend 2^x - 1 for even ranges
 DRAWS: int = 100 # Number of times to draw for a given path
 MAX_DEPTH: int = 10 # Max blocks to traverse up the control flow graph
+MAX_LOOPS: int = 3 # Maximum Number of loops to symbolically execute before falling back on concrete

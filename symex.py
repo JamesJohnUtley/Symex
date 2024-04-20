@@ -9,13 +9,13 @@ import argparse
 from tests import *
 from symins import *
 from solving import SolvingState, SymbolicInstruction
-from const_variables import MAX_DEPTH, RUN_DEFAULT_VALUE, PROBLEMATIC_ID
+from const_variables import MAX_DEPTH, RUN_DEFAULT_VALUE, PROBLEMATIC_ID, MAX_LOOPS
 from FVSs import FeasibleValueSet, FeasibleValueSetProblematic
 from symutils import get_qu_bounds, OutputSummary, construct_output_summary
 
 
-follow_lead_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE', 'JUMP_FORWARD']
-conditional_jump_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE']
+follow_lead_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE', 'JUMP_FORWARD', 'POP_JUMP_BACKWARD_IF_TRUE']
+conditional_jump_opnames = ['POP_JUMP_FORWARD_IF_FALSE', 'POP_JUMP_FORWARD_IF_TRUE', 'POP_JUMP_BACKWARD_IF_TRUE']
 
 class InstructionBlock:
     def __init__(self, offset: int, offset_instructions: int, id: int):
@@ -44,6 +44,8 @@ class FeasiblePath:
         self.path = path
         self.solving_state = solving_state
 
+CFG = Tuple[Dict[int,InstructionBlock], List[InstructionBlock], Set[Tuple[int,int]]]
+
 def main(args):
     print(f"BREAKING: {args.function_name}")
     # Breakdown Arguments
@@ -62,8 +64,22 @@ def main(args):
         return 0
     
     output_summary = construct_output_summary(args.function_name, args.prints, args.errors, args.output)
+
+    instructions: List[Instruction] = []
+    for x in dis.get_instructions(output_summary.function):
+        instructions.append(x)
+
+    cfg: CFG = construct_cfg(instructions)
+    if args.cf:
+        blocks, end_blocks, jump_edges = cfg
+        for x in blocks.values():
+            print(f"{x.id} -> {[y.id for y in x.successors]}")
+        for x in blocks.values():
+            print(f"{[y.id for y in x.predecessors]} -> {x.id}")
+        print(f"{[x.id for x in end_blocks]}")
+        return 0
     
-    end_paths = find_feasible_paths(output_summary)
+    end_paths = find_feasible_paths(output_summary, cfg)
     
     evaluate_bounds(end_paths, output_summary)
 
@@ -103,6 +119,7 @@ def evaluate_bounds(end_paths: List[FeasiblePath], output_summary: OutputSummary
         print(f"Group: {id}")
         for path in path_groups[id]:
             print(f"{[x.id for x in path.path]}")
+            path.solving_state.check_solvability()
         fvs = FeasibleValueSetProblematic([path.solving_state for path in path_groups[id]], output_summary)
         bounds = fvs.get_bounds()
         total_bounds = tuple(x + y for x, y in zip(total_bounds, bounds))
@@ -110,24 +127,11 @@ def evaluate_bounds(end_paths: List[FeasiblePath], output_summary: OutputSummary
     print(f"TB: {total_bounds}")
     print(f"QU: {get_qu_bounds(total_bounds)}")
 
-def find_feasible_paths(output_summary: OutputSummary) -> List[FeasiblePath]:
-    instructions: List[Instruction] = []
-    for x in dis.get_instructions(output_summary.function):
-        instructions.append(x)
-
-    blocks, end_blocks, jump_edges = construct_cfg(instructions)
-    if args.cf:
-        for x in blocks.values():
-            print(f"{x.id} -> {[y.id for y in x.successors]}")
-        for x in blocks.values():
-            print(f"{[y.id for y in x.predecessors]} -> {x.id}")
-        print(f"{[x.id for x in end_blocks]}")
-        return 0
-
+def find_feasible_paths(output_summary: OutputSummary, cfg: CFG) -> List[FeasiblePath]:
     end_paths: List[FeasiblePath] = []
+    blocks, end_blocks, jump_edges = cfg
     for end_block in end_blocks:
         build_paths(end_paths, end_block, jump_edges, base_solve_state=SolvingState(output_summary=output_summary))
-
     return end_paths
 
 def build_paths(end_paths: List[FeasiblePath],
@@ -137,23 +141,68 @@ def build_paths(end_paths: List[FeasiblePath],
                 prefix_path: List[InstructionBlock] = [],
                 base_solve_state: SolvingState = None):
     base_solve_state = base_solve_state if base_solve_state is not None else SolvingState()
+    # Detect Max Depth
     if depth >= MAX_DEPTH:
         return
+    # Detect Max Loops
+    # Count
+    count: int = 0
+    for x in prefix_path:
+        if x.id == last_block.id:
+            count += 1
+    # Kill on loops
+    if count >= MAX_LOOPS: # TODO: make own function
+        last_block.tainted = True
+        # Now escape, take prefix_path which we know is possible and leave the loop
+        # Know that last block is the end of the loop, so prefix path must end at the start of the loop, find an entry that is not from the loop
+        # Find what blocks are in the loop
+        in_loop: Set[int] = set()
+        entered_loop: bool = False
+        for i in range(len(prefix_path)):
+            if not entered_loop:
+                if prefix_path[i].id == last_block.id:
+                    # Found first instance, Anything after is in loop
+                    entered_loop = True
+                    in_loop.add(prefix_path[i].id)
+            else:
+                in_loop.add(prefix_path[i].id)
+        # Go to a block without traversing that is not in the loop, i.e. skip a recursion
+        print(f"ahh: {[x.id for x in prefix_path]}")
+        entry_loop_block: InstructionBlock = prefix_path[-1]
+        found_predecessor: bool = False
+        for x in entry_loop_block.predecessors:
+            if not x.id in in_loop:
+                new_ss = base_solve_state.copy()
+                new_ss.rollover_all_variables()
+                add_from_end_of_path(new_ss, depth, end_paths, jump_edges, prefix_path + [x])
+                found_predecessor = True
+        if not found_predecessor:
+            print(f"ERROR: NO NON-LOOP PREDECESSOR FOUND", file=sys.stderr)
+        return
     # Construct full path
-    path = prefix_path + [last_block]
+    path: List[InstructionBlock] = prefix_path + [last_block]
     print(f"{[x.id for x in path]}")
 
     # Attempt to solve
     if(traverse_block(last_block, base_solve_state)):
-        if len(last_block.predecessors) != 0: 
-            for neighbor in last_block.predecessors:
-                new_ss: SolvingState = base_solve_state.copy()
-                new_ss.last_was_jump = (neighbor.id, last_block.id) in jump_edges
-                build_paths(end_paths, neighbor, jump_edges, depth +  1, path, new_ss)
-        else:
-            end_paths.append(FeasiblePath(path,base_solve_state))
+        add_from_end_of_path(base_solve_state, depth, end_paths, jump_edges, path)
 
-def construct_cfg(instructions: List[Instruction]) -> Tuple[Dict[int,InstructionBlock], List[InstructionBlock], Set[Tuple[int,int]]]:
+# Assumes given path is valid, adds connected to test
+def add_from_end_of_path(base_solve_state: SolvingState,
+                         depth: int,
+                         end_paths: List[FeasiblePath],
+                         jump_edges: Set[Tuple[int,int]],
+                         path: List[InstructionBlock]):
+    last_block = path[-1]
+    if len(last_block.predecessors) != 0: 
+        for neighbor in last_block.predecessors:
+            new_ss: SolvingState = base_solve_state.copy()
+            new_ss.last_was_jump = (neighbor.id, last_block.id) in jump_edges
+            build_paths(end_paths, neighbor, jump_edges, depth +  1, path, new_ss)
+    else:
+        end_paths.append(FeasiblePath(path,base_solve_state))
+
+def construct_cfg(instructions: List[Instruction]) -> CFG:
     # Construct Nodes
     follows_jump = True
     blocks: Dict[int, InstructionBlock] = {}
@@ -178,6 +227,7 @@ def construct_cfg(instructions: List[Instruction]) -> Tuple[Dict[int,Instruction
 
     end_blocks: List[InstructionBlock] = []
     jump_edges: Set[Tuple[int, int]] = set() # Forward edges that are jumps
+
     # Construct Edges
     for x in blocks.values():
         last_instruction = x.instructions[len(x.instructions) - 1]

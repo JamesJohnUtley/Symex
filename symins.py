@@ -148,6 +148,18 @@ class JumpForwardInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
         pass
 
+class PopJumpBackwardIfTrueInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        self.requested_items = 3
+        ss.hunting_stack.append(self)
+    def execute(self, ss: SolvingState):
+        comparator: function = None
+        if ss.last_was_jump:
+            comparator = COMPARE_OPERATORS[self.given_items[2]]
+        else:
+            comparator = COMPARE_OPERATORS[FLIP_OPERATORS[self.given_items[2]]]
+        ss.constraints.append(SymbolicConstraint(self.given_items[0],self.given_items[1],comparator))
+
 symbolic_instructions = {
     'RETURN_VALUE': ReturnInstruction,
     'LOAD_FAST': LoadFastInstruction,
@@ -162,5 +174,6 @@ symbolic_instructions = {
     'CALL': CallInstruction,
     'PRECALL': PreCallInstruction,
     'LOAD_GLOBAL': LoadGlobalInstruction,
-    'JUMP_FORWARD': JumpForwardInstruction
+    'JUMP_FORWARD': JumpForwardInstruction,
+    'POP_JUMP_BACKWARD_IF_TRUE': PopJumpBackwardIfTrueInstruction
 }

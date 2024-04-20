@@ -159,6 +159,10 @@ class SolvingState:
         new_sym = SymbolicVariable(f"{name}@{len(self.symbolic_variables[name])}")
         self.symbolic_variables[name].append(new_sym)
         return new_sym
+    
+    def rollover_all_variables(self):
+        for var_name in self.symbolic_variables.keys():
+            self.get_new_variable_iteration(var_name)
 
     def get_current_variable_iteration(self, name: str) -> Any:
         if name not in self.symbolic_variables.keys():

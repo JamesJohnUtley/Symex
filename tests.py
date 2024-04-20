@@ -94,9 +94,11 @@ def basic_concrete(x):
                 w = 3
     return w
 
-def loop_test(x): # TODO: Implement pop_jump_backward
+def loop_test(x): # TODO: Detect Loop
+    if x < -2000  or x >= 2000:
+        return -1
     while x < 50:
-        x += 5
+        x = x + 5
     return x
 
 def register_user(username, age):

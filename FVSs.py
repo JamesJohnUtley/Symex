@@ -37,6 +37,7 @@ class FeasibleValueSet:
         self.unknown_sym_vars: Any = []
         for base_solver in self.base_solvers:
             self.unknown_sym_vars.append(base_solver.get_current_variable_iteration(next(iter(base_solver.unstored_variables))))
+        print([x.name for x in self.unknown_sym_vars])
 
 
     # Upper Bound, PE, Lower bound
@@ -212,7 +213,7 @@ class FeasibleValueSetProblematic(FeasibleValueSet):
         self._build_set()
         # Count
         feasible_count, unknown_count, total_count = self._count()
-        homeless_feasible: Set[int] = self._homeless_feasible()
+        homeless_feasible: List[int] = self._homeless_feasible()
         # Construct Weights
         frs_weights: List[float] = self._construct_weights(total_count, homeless_feasible)
         # Estimate
@@ -246,7 +247,8 @@ class FeasibleValueSetProblematic(FeasibleValueSet):
                 feasibles_found += 1
                 if(self._concrete_eval(draw)):
                     valid_feasibles += 1
-        return (feasible_unknowns / found_unknown, valid_feasibles / feasibles_found)
+        feasibility_estimate = 0 if found_unknown == 0 else feasible_unknowns / found_unknown
+        return (feasibility_estimate, valid_feasibles / feasibles_found)
     
     def _concrete_eval(self, draw: int) -> bool:
         # Prep Capture
@@ -278,14 +280,17 @@ class FeasibleValueSetProblematic(FeasibleValueSet):
         errors.reverse()
         return OutputSummary(self.output_summary.function, prints, errors,return_value)
     
-    def _construct_weights(self, total_count: int, homeless_feasible: Set[int]) -> List[float]:
+    def _construct_weights(self, total_count: int, homeless_feasible: List[int]) -> List[float]:
         weights = super()._construct_weights(total_count)
-        homeless_weight = len(homeless_feasible) / total_count
+        if total_count > 0:
+            homeless_weight = len(homeless_feasible) / total_count
+        else:
+            homeless_weight = 1
         weights.append(homeless_weight)
         return weights
 
-    def _homeless_feasible(self) -> Set[int]:
-        homeless = self.feasible_values.copy()
+    def _homeless_feasible(self) -> List[int]:
+        homeless = list(self.feasible_values.copy())
         for fr in self.frs:
             for x in fr.feasibility_set:
                 homeless.remove(x)
