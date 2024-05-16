@@ -8,6 +8,16 @@ def cond_test(a):
         return 15
     return b
 
+def type_test():
+    a = 1
+    b = a
+    c = b
+    d = 'a'
+    e = d
+    f = e
+    f = c
+    return f
+
 def basic_cond(x):
     if x > 5:
         x = 2
@@ -17,7 +27,7 @@ def basic_str():
     return 'abc'
 
 def true_cond(x):
-    # x = 1
+    x = 1
     if x > 5 or x == 2:
         x = 2
     return x
@@ -27,15 +37,69 @@ def single_block():
     c = b
     return c
 
-def math_block():
-    d = 9
+def print_leak(x):
+    print(x)
+    return x
+
+def print_test(x):
+    if x < 200:
+        print('error')
+    else:
+        print('print')
+    print('last')
+    return 5
+
+def concrete_print_test(x):
+    if x % 2 == 0:
+        print('error')
+    else:
+        print('print')
+    print('last')
+    return 5
+
+def concrete_errors_test(x):
+    if x % 2 == 0:
+        ValueError('error')
+    else:
+        ValueError('print')
+    ValueError('last')
+    return 5
+
+def math_block(d):
+    # d = 9
     d = 3 * d
     b = 2
-    b = d - b
-    c = b + b
+    if d < 10:
+        b = d - b
+        c = b + b
+    else:
+        c = 10
     c = c
     c = c * 5 + 5
     return c / 5
+
+def basic_concrete(x):
+    if x > 1024 or x < -1023:
+        return -1
+    if x <= 0:
+        w = 2
+    else:
+        parity = x % 2
+        if parity == 0:
+            w = 2
+        else:
+            if x > 512:
+                return 2
+            else:
+                w = 3
+    return w
+
+def loop_test(x): # TODO: Detect Loop
+    if x < -2000  or x >= 2000:
+        return -1
+    while x < 50:
+        x = x + 5
+    return x
 
 def register_user(username, age):
     if not username.isalnum():
@@ -69,4 +133,4 @@ def no_call_error():
         print("Error:", e)
 
 if __name__ == '__main__':
-    no_call_error()
+    print(f"Out: {cond_test(3)}")

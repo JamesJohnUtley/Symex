@@ -5,30 +5,34 @@ from collections import deque
 from dis import Instruction
 from typing import List, Any, Dict
 from z3 import *
-from solving import SolvingState, SymbolicInstruction
+from solving import SolvingState, SymbolicInstruction, SymbolicConstraint, SymbolicVariable
 from const_variables import *
+from extern_funcs import *
 
 class ReturnInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
         self.requested_items = 1
         ss.hunting_stack.append(self)
-        self.out_var = ss.get_current_variable_iteration(OUT_CV)
+        self.out_var: SymbolicVariable = ss.get_current_variable_iteration(OUT_CV)
     def execute(self, ss: SolvingState):
-        print(f"Return {self.given_items[0]}")
-        ss.solver.add(self.out_var == self.given_items[0])
+        # print(f"Return {self.given_items[0]}")
+        ss.constraints.append(SymbolicConstraint(self.out_var, self.given_items[0], operator.eq))
 
 class LoadFastInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
         ss.avaliability_stack.append(ss.get_current_variable_iteration(self.instruction.argval))
+        ss.unstored_variables.add(self.instruction.argval)
 
 class StoreFastInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
         self.requested_items = 1
         ss.hunting_stack.append(self)
-        self.set_iteration = ss.get_current_variable_iteration(self.instruction.argval)
+        self.set_iteration: SymbolicVariable = ss.get_current_variable_iteration(self.instruction.argval)
         ss.get_new_variable_iteration(self.instruction.argval)
+        if self.instruction.argval in ss.unstored_variables:
+            ss.unstored_variables.remove(self.instruction.argval)
     def execute(self, ss: SolvingState):
-        ss.solver.add(self.set_iteration == self.given_items[0])
+        ss.constraints.append(SymbolicConstraint(self.set_iteration, self.given_items[0], operator.eq))
 
 class ResumeInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
@@ -55,15 +59,17 @@ BINARY_OPERATORS = {
     }
 
 class BinaryOpInstruction(SymbolicInstruction):
+    def is_tainted(self):
+        return not self.instruction.argrepr in BINARY_OPERATORS.keys()
     def load(self, ss: SolvingState):
         self.requested_items = 2
         ss.hunting_stack.append(self)
-        self.binop_var = ss.get_new_variable_iteration(BIN_CV)
+        self.binop_var: SymbolicVariable = ss.get_new_variable_iteration(BIN_CV)
     def execute(self, ss: SolvingState):
-        if self.instruction.argrepr not in BINARY_OPERATORS.keys():
-            print(f"ERROR: Binary Operator {self.instruction.argrepr} Undefined")
-            return
-        ss.solver.add(self.binop_var == BINARY_OPERATORS[self.instruction.argrepr](self.given_items[0], self.given_items[1]))
+        if self.instruction.argrepr in BINARY_OPERATORS.keys():
+            ss.constraints.append(SymbolicConstraint(self.binop_var,self.given_items[0],operator.eq,BINARY_OPERATORS[self.instruction.argrepr],self.given_items[1]))
+        else:
+            print(f"WARNING: Binary Operator {self.instruction.argrepr} Undefined")
         ss.avaliability_stack.append(self.binop_var)
 
 
@@ -95,7 +101,7 @@ class PopJumpForwardIfFalseInstruction(SymbolicInstruction):
             comparator = COMPARE_OPERATORS[FLIP_OPERATORS[self.given_items[2]]]
         else:
             comparator = COMPARE_OPERATORS[self.given_items[2]]
-        ss.solver.add(comparator(self.given_items[0], self.given_items[1]))
+        ss.constraints.append(SymbolicConstraint(self.given_items[0], self.given_items[1], comparator))
 
 class PopJumpForwardIfTrueInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
@@ -107,12 +113,52 @@ class PopJumpForwardIfTrueInstruction(SymbolicInstruction):
             comparator = COMPARE_OPERATORS[self.given_items[2]]
         else:
             comparator = COMPARE_OPERATORS[FLIP_OPERATORS[self.given_items[2]]]
-        ss.solver.add(comparator(self.given_items[0], self.given_items[1]))
+        ss.constraints.append(SymbolicConstraint(self.given_items[0],self.given_items[1],comparator))
 
 class CompareOpInstruction(SymbolicInstruction):
     def load(self, ss: SolvingState):
         ss.avaliability_stack.append(self.instruction.arg)
 
+class PopTopInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        self.requested_items = 1
+        ss.hunting_stack.append(self)
+    def execute(self, ss: SolvingState):
+        pass
+
+class CallInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        pass
+
+class PreCallInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        self.requested_items = self.instruction.argval + 1
+        ss.hunting_stack.append(self)
+    def execute(self, ss: SolvingState):
+        if self.given_items[0] in external_functions_execs.keys():
+            external_functions_execs[self.given_items[0]](list(self.given_items)[1:], ss)
+        else:
+            print(f"ERROR: EXEC EXTERNAL FUNCTION {self.given_items[0]} NOT IMPLEMENTED", file=sys.stderr)
+
+class LoadGlobalInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        ss.avaliability_stack.append(self.instruction.argval)
+
+class JumpForwardInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        pass
+
+class PopJumpBackwardIfTrueInstruction(SymbolicInstruction):
+    def load(self, ss: SolvingState):
+        self.requested_items = 3
+        ss.hunting_stack.append(self)
+    def execute(self, ss: SolvingState):
+        comparator: function = None
+        if ss.last_was_jump:
+            comparator = COMPARE_OPERATORS[self.given_items[2]]
+        else:
+            comparator = COMPARE_OPERATORS[FLIP_OPERATORS[self.given_items[2]]]
+        ss.constraints.append(SymbolicConstraint(self.given_items[0],self.given_items[1],comparator))
 
 symbolic_instructions = {
     'RETURN_VALUE': ReturnInstruction,
@@ -123,5 +169,11 @@ symbolic_instructions = {
     'BINARY_OP': BinaryOpInstruction,
     'POP_JUMP_FORWARD_IF_FALSE': PopJumpForwardIfFalseInstruction,
     'POP_JUMP_FORWARD_IF_TRUE': PopJumpForwardIfTrueInstruction,
-    'COMPARE_OP': CompareOpInstruction
+    'COMPARE_OP': CompareOpInstruction,
+    'POP_TOP': PopTopInstruction,
+    'CALL': CallInstruction,
+    'PRECALL': PreCallInstruction,
+    'LOAD_GLOBAL': LoadGlobalInstruction,
+    'JUMP_FORWARD': JumpForwardInstruction,
+    'POP_JUMP_BACKWARD_IF_TRUE': PopJumpBackwardIfTrueInstruction
 }
